@@ -232,6 +232,33 @@ const SUPPLEMENTAL_LINEUPS = {
   ],
 };
 
+// ── Demo Market Data ──────────────────────────────────────────
+const DEMO_MARKET_PLAYERS = [
+  {name:'Vinícius Júnior', position:'Left Winger', currentClubName:'Real Madrid', marketValueInEur:200000000},
+  {name:'Erling Haaland', position:'Centre-Forward', currentClubName:'Manchester City', marketValueInEur:200000000},
+  {name:'Jude Bellingham', position:'Attacking Midfield', currentClubName:'Real Madrid', marketValueInEur:180000000},
+  {name:'Kylian Mbappé', position:'Centre-Forward', currentClubName:'Real Madrid', marketValueInEur:180000000},
+  {name:'Lamine Yamal', position:'Right Winger', currentClubName:'FC Barcelona', marketValueInEur:150000000},
+  {name:'Phil Foden', position:'Right Winger', currentClubName:'Manchester City', marketValueInEur:150000000},
+  {name:'Bukayo Saka', position:'Right Winger', currentClubName:'Arsenal FC', marketValueInEur:140000000},
+  {name:'Florian Wirtz', position:'Attacking Midfield', currentClubName:'Bayer Leverkusen', marketValueInEur:130000000},
+  {name:'Jamal Musiala', position:'Attacking Midfield', currentClubName:'Bayern Munich', marketValueInEur:130000000},
+  {name:'Rodri', position:'Defensive Midfield', currentClubName:'Manchester City', marketValueInEur:130000000},
+];
+
+const DEMO_MARKET_CLUBS = [
+  {name:'Real Madrid CF', domesticCompetitionId:'ES1', squadSize:22, totalMarketValue:'1340000000'},
+  {name:'Manchester City FC', domesticCompetitionId:'GB1', squadSize:23, totalMarketValue:'1260000000'},
+  {name:'Arsenal FC', domesticCompetitionId:'GB1', squadSize:22, totalMarketValue:'1170000000'},
+  {name:'Chelsea FC', domesticCompetitionId:'GB1', squadSize:29, totalMarketValue:'960000000'},
+  {name:'FC Barcelona', domesticCompetitionId:'ES1', squadSize:24, totalMarketValue:'940000000'},
+  {name:'Bayern Munich', domesticCompetitionId:'L1', squadSize:27, totalMarketValue:'930000000'},
+  {name:'Liverpool FC', domesticCompetitionId:'GB1', squadSize:24, totalMarketValue:'930000000'},
+  {name:'Paris Saint-Germain', domesticCompetitionId:'FR1', squadSize:28, totalMarketValue:'890000000'},
+  {name:'Manchester United FC', domesticCompetitionId:'GB1', squadSize:28, totalMarketValue:'850000000'},
+  {name:'Tottenham Hotspur', domesticCompetitionId:'GB1', squadSize:26, totalMarketValue:'770000000'},
+];
+
 const QUOTES = [
   '"Quality without results is pointless. Results without quality is boring." — Johan Cruyff',
   '"Success is no accident. It is hard work, perseverance, learning, studying, sacrifice." — Pelé',
@@ -800,60 +827,62 @@ async function loadStandings() {
 async function loadMarket() {
   const el = document.getElementById('market-container');
   el.innerHTML = '<div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div><p>Loading market data...</p></div>';
+
+  let players = [], clubs = [];
   try {
     const [playersR, clubsR] = await Promise.all([
-      fetch('/api/analytics/top-players?limit=15'),
-      fetch('/api/analytics/top-clubs?limit=15'),
+      fastFetch('/api/analytics/top-players?limit=15'),
+      fastFetch('/api/analytics/top-clubs?limit=15'),
     ]);
-    const players = await playersR.json();
-    const clubs   = await clubsR.json();
-
-    const maxPVal = Math.max(...players.map(p => parseInt(p.marketValueInEur) || 0), 1);
-    const maxCVal = Math.max(...clubs.map(c => parseInt(c.totalMarketValue?.replace?.(/[^0-9]/g,'')) || 0), 1);
-
-    const playerRows = players.map((p, i) => {
-      const val = parseInt(p.marketValueInEur) || 0;
-      const pct = (val / maxPVal * 100).toFixed(1);
-      return `<div class="analytics-row">
-        <div class="analytics-rank">${i+1}</div>
-        <div class="analytics-item-info">
-          <div class="analytics-item-name">${esc(p.name)}</div>
-          <div class="analytics-item-sub">${esc(p.position || '')} · ${esc(p.currentClubName || '')}</div>
-          <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-        <div class="analytics-value">${fmtVal(val)}</div>
-      </div>`;
-    }).join('');
-
-    const clubRows = clubs.map((c, i) => {
-      const raw = String(c.totalMarketValue || '').replace(/[^0-9]/g, '');
-      const val = parseInt(raw) || 0;
-      const pct = (val / maxCVal * 100).toFixed(1);
-      return `<div class="analytics-row">
-        <div class="analytics-rank">${i+1}</div>
-        <div class="analytics-item-info">
-          <div class="analytics-item-name">${esc(c.name)}</div>
-          <div class="analytics-item-sub">${esc(c.domesticCompetitionId || '')} · ${esc(c.squadSize ? c.squadSize + ' players' : '')}</div>
-          <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-        <div class="analytics-value">${fmtVal(val)}</div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = `
-      <div class="analytics-card">
-        <div class="analytics-card-header"><span class="analytics-card-title">Top Players by Value</span></div>
-        <div class="analytics-card-body">${playerRows}</div>
-      </div>
-      <div class="analytics-card">
-        <div class="analytics-card-header"><span class="analytics-card-title">Top Clubs by Value</span></div>
-        <div class="analytics-card-body">${clubRows}</div>
-      </div>`;
-    // Stagger-animate analytics rows
-    observeElements('.analytics-row', el);
-  } catch (_) {
-    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Failed to load market data</p></div>';
+    if (!playersR.ok || !clubsR.ok) throw new Error();
+    players = await playersR.json();
+    clubs   = await clubsR.json();
+  } catch (e) {
+    players = DEMO_MARKET_PLAYERS;
+    clubs   = DEMO_MARKET_CLUBS;
   }
+
+  const maxPVal = Math.max(...players.map(p => parseInt(String(p.marketValueInEur).replace(/[^0-9]/g,'')) || 0), 1);
+  const maxCVal = Math.max(...clubs.map(c => parseInt(String(c.totalMarketValue || '').replace(/[^0-9]/g,'')) || 0), 1);
+
+  const playerRows = players.map((p, i) => {
+    const val = parseInt(String(p.marketValueInEur).replace(/[^0-9]/g,'')) || 0;
+    const pct = (val / maxPVal * 100).toFixed(1);
+    return `<div class="analytics-row reveal">
+      <div class="analytics-rank">${i+1}</div>
+      <div class="analytics-item-info">
+        <div class="analytics-item-name">${esc(p.name)}</div>
+        <div class="analytics-item-sub">${esc(p.position || '')} · ${esc(p.currentClubName || '')}</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="analytics-value">${fmtVal(val)}</div>
+    </div>`;
+  }).join('');
+
+  const clubRows = clubs.map((c, i) => {
+    const val = parseInt(String(c.totalMarketValue || '').replace(/[^0-9]/g,'')) || 0;
+    const pct = (val / maxCVal * 100).toFixed(1);
+    return `<div class="analytics-row reveal">
+      <div class="analytics-rank">${i+1}</div>
+      <div class="analytics-item-info">
+        <div class="analytics-item-name">${esc(c.name)}</div>
+        <div class="analytics-item-sub">${esc(c.domesticCompetitionId || '')} · ${esc(c.squadSize ? c.squadSize + ' players' : '')}</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="analytics-value">${fmtVal(val)}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="analytics-card">
+      <div class="analytics-card-header"><span class="analytics-card-title">Top Players by Value</span></div>
+      <div class="analytics-list">${playerRows}</div>
+    </div>
+    <div class="analytics-card">
+      <div class="analytics-card-header"><span class="analytics-card-title">Top Clubs by Value</span></div>
+      <div class="analytics-list">${clubRows}</div>
+    </div>`;
+  observeElements('.analytics-row.reveal', el);
 }
 
 // ── Utilities ──────────────────────────────────────────────────
