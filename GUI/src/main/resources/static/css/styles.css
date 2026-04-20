@@ -1328,7 +1328,9 @@ input, select { font-family: var(--font); }
   .app-layout {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh; /* Better handling of iOS Safari bottom bar */
+    width: 100vw;
+    overflow-x: hidden;
   }
   
   .app-layout.panel-open {
