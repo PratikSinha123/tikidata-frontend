@@ -76,9 +76,9 @@
       </a>
 
       <nav class="navbar-tabs">
-        <button class="nav-tab active" id="tab-matches" onclick="switchTab('matches')">Matches</button>
-        <button class="nav-tab" id="tab-standings" onclick="switchTab('standings')">Standings</button>
-        <button class="nav-tab" id="tab-market" onclick="switchTab('market')">Market</button>
+        <button class="nav-tab active" id="tab-matches" onclick="switchTab('matches')" ontouchstart="switchTab('matches')">Matches</button>
+        <button class="nav-tab" id="tab-standings" onclick="switchTab('standings')" ontouchstart="switchTab('standings')">Standings</button>
+        <button class="nav-tab" id="tab-market" onclick="switchTab('market')" ontouchstart="switchTab('market')">Market</button>
       </nav>
 
       <div class="search-container">
@@ -163,7 +163,7 @@
     <!-- Detail Panel -->
     <aside class="detail-panel hidden" id="detail-panel">
       <div class="detail-header">
-        <button class="close-btn" onclick="closeDetail()">✕</button>
+        <button class="close-btn" onclick="closeDetail()" ontouchstart="closeDetail()">✕</button>
         <span class="detail-comp" id="detail-comp"></span>
       </div>
       <div class="detail-body" id="detail-body"></div>

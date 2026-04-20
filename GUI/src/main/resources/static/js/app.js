@@ -705,8 +705,8 @@ function renderDetailBody(match, events, lineups) {
     ${match.stadium ? `<div style="padding:8px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border)">🏟 ${esc(match.stadium)}${match.attendance ? ' · ' + Number(match.attendance).toLocaleString() + ' att.' : ''}${match.referee ? ' · Ref: ' + esc(match.referee) : ''}</div>` : ''}
 
     <div class="detail-tabs">
-      <button class="detail-tab active" id="dtab-events"   onclick="activateDetailTab('events')">Events</button>
-      <button class="detail-tab"        id="dtab-lineups"  onclick="activateDetailTab('lineups')">Lineups</button>
+      <button class="detail-tab active" id="dtab-events"   onclick="activateDetailTab('events')" ontouchstart="activateDetailTab('events')">Events</button>
+      <button class="detail-tab"        id="dtab-lineups"  onclick="activateDetailTab('lineups')" ontouchstart="activateDetailTab('lineups')">Lineups</button>
     </div>
 
     <div id="detail-events">${renderEvents(events, match)}</div>
