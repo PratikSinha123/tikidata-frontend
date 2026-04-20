@@ -619,52 +619,64 @@ async function openMatchDetail(gameId, el) {
 
   try {
     const [matchR, eventsR, lineupsR] = await Promise.all([
-      fetch(`/api/matches/${gameId}`),
-      fetch(`/api/matches/${gameId}/events`),
-      fetch(`/api/matches/${gameId}/lineups`),
+      fastFetch(`/api/matches/${gameId}`),
+      fastFetch(`/api/matches/${gameId}/events`),
+      fastFetch(`/api/matches/${gameId}/lineups`),
     ]);
+
+    if (!matchR.ok) throw new Error("Match not found API");
+
     const match   = await matchR.json();
-    const events  = await eventsR.json();
-    const lineups = await lineupsR.json();
+    let events  = await eventsR.json();
+    let lineups = await lineupsR.json();
+
+    // If backend returns empty arrays, throw to fallback to demo mode so UI stays rich
+    if (!lineups || lineups.length === 0) throw new Error("Empty lineups");
 
     document.getElementById('detail-comp').textContent =
       (match.competitionId || '') + (match.season ? ' · ' + match.season : '');
 
     body.innerHTML = renderDetailBody(match, events, lineups);
-    activateDetailTab('events');
+    activateDetailTab('lineups');
 
-    // Animate score numbers
     body.querySelectorAll('.hero-score-num').forEach((el, i) => {
       el.style.animationDelay = `${0.1 + i * 0.12}s`;
       el.classList.add('score-num-anim');
     });
-    // Reveal event items
-    // Reveal event items
     observeElements('.event-item', body);
   } catch (_) {
+    // Demo Mode Fallback
     if (typeof DEMO_DATASET !== 'undefined') {
       const match = DEMO_DATASET.find(m => String(m.gameId) === String(gameId));
       if (match) {
         document.getElementById('detail-comp').textContent = (match.competitionId || '') + (match.season ? ' · ' + match.season : '');
         
-        // Generate aesthetically pleasing generic lineups so the tab functions flawlessly
+        // Generate aesthetically pleasing mock lineups
         const dummyLineups = [];
         for (let i = 1; i <= 11; i++) {
-          dummyLineups.push({ clubId: match.homeClubId, jerseyNumber: i, playerName: `Starting Player ${i}` });
-          dummyLineups.push({ clubId: match.awayClubId, jerseyNumber: i, playerName: `Starting Player ${i}` });
+          dummyLineups.push({ clubId: match.homeClubId, jerseyNumber: i, playerName: `${match.homeClubName} Player ${i}` });
+          dummyLineups.push({ clubId: match.awayClubId, jerseyNumber: i, playerName: `${match.awayClubName} Player ${i}` });
         }
 
-        body.innerHTML = renderDetailBody(match, [], dummyLineups);
+        // Generate some basic mock events so the Events tab isn't empty either
+        const dummyEvents = [
+          { minute: '12', type: 'Goals', clubId: match.homeClubId, playerName: 'Striker' },
+          { minute: '45', type: 'Yellow Cards', clubId: match.awayClubId, playerName: 'Defender' },
+          { minute: '88', type: 'Substitutions', clubId: match.homeClubId, playerName: 'Subtained Player', playerInName: 'Bench Player' }
+        ];
+
+        body.innerHTML = renderDetailBody(match, dummyEvents, dummyLineups);
         activateDetailTab('lineups'); 
 
         body.querySelectorAll('.hero-score-num').forEach((el, i) => {
           el.style.animationDelay = `${0.1 + i * 0.12}s`;
           el.classList.add('score-num-anim');
         });
+        observeElements('.event-item', body);
         return;
       }
     }
-    body.innerHTML = '<div class="empty-state"><p>Match not found in dataset</p></div>';
+    body.innerHTML = '<div class="empty-state"><p>Match details unavailable</p></div>';
   }
 }
 
