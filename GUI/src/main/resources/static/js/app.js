@@ -701,25 +701,29 @@ async function openMatchDetail(gameId, el) {
       if (match) {
         document.getElementById('detail-comp').textContent = (match.competitionId || '') + (match.season ? ' · ' + match.season : '');
         
-        // Generate aesthetically pleasing mock lineups
         const dummyLineups = [];
-        // Use short club name abbreviations (first word) to keep lineup names tidy
-        const shortHome = (match.homeClubName || 'Home').split(' ')[0];
-        const shortAway = (match.awayClubName || 'Away').split(' ')[0];
+        // Use realistic-sounding generic global names to make the demo UI look authentic
+        const hSurnames = ['Silva', 'Rossi', 'Smith', 'Costa', 'Hernandez', 'Kim', 'Johansson', 'Müller', 'Watanabe', 'Ahmed', 'Davies'];
+        const aSurnames = ['Gonzalez', 'Ivanov', 'Mensah', 'Okafor', 'Popovic', 'Larsson', 'Traoré', 'Fernandez', 'Becker', 'Dubois', 'Martinez'];
+        const initials = ['A.', 'J.', 'M.', 'L.', 'D.', 'C.', 'P.', 'S.', 'K.', 'E.', 'R.'];
+
         for (let i = 1; i <= 11; i++) {
-          dummyLineups.push({ clubId: match.homeClubId, jerseyNumber: i, playerName: `${shortHome} Player ${i}` });
-          dummyLineups.push({ clubId: match.awayClubId, jerseyNumber: i, playerName: `${shortAway} Player ${i}` });
+          const isCapt = i === 5 ? ' (C)' : '';
+          const hName = `${initials[(i-1)%11]} ${hSurnames[(i-1)%11]}${isCapt}`;
+          const aName = `${initials[(i+2)%11]} ${aSurnames[(i-1)%11]}${isCapt}`;
+          dummyLineups.push({ clubId: match.homeClubId, number: i, playerName: hName, type: 'starting' });
+          dummyLineups.push({ clubId: match.awayClubId, number: i, playerName: aName, type: 'starting' });
         }
 
         // Generate some basic mock events so the Events tab isn't empty either
         const dummyEvents = [
-          { minute: '12', type: 'Goals', clubId: match.homeClubId, playerName: 'Striker' },
-          { minute: '45', type: 'Yellow Cards', clubId: match.awayClubId, playerName: 'Defender' },
-          { minute: '88', type: 'Substitutions', clubId: match.homeClubId, playerName: 'Subtained Player', playerInName: 'Bench Player' }
+          { minute: '12', type: 'goals', clubId: match.homeClubId, playerName: `${initials[8]} ${hSurnames[8]}`, description: 'Low finish into bottom corner' },
+          { minute: '45', type: 'yellow-cards', clubId: match.awayClubId, playerName: `${initials[4]} ${aSurnames[2]}`, description: 'Foul committed' },
+          { minute: '88', type: 'substitutions', clubId: match.homeClubId, playerName: `${initials[2]} ${hSurnames[2]}`, playerInName: `T. Reserve`, description: '' }
         ];
 
         body.innerHTML = renderDetailBody(match, dummyEvents, dummyLineups);
-        activateDetailTab('lineups'); 
+        activateDetailTab('lineups');
 
         body.querySelectorAll('.hero-score-num').forEach((el, i) => {
           el.style.animationDelay = `${0.1 + i * 0.12}s`;
