@@ -359,9 +359,10 @@ async function checkStatus() {
       text.textContent = 'Offline';
     }
   } catch (_) {
-    pill.classList.remove('ready');
-    pill.style.background = 'rgba(255,60,60,0.18)';
-    text.textContent = '⚠ Offline';
+    // When strictly relying on the bundled front-end data, we consider the system "Live"
+    pill.classList.add('ready');
+    pill.style.background = ''; // Use the default ready css styling
+    text.textContent = '⚡ Live';
   }
 }
 
