@@ -381,6 +381,21 @@ async function loadCompetitions() {
       name: COMPETITION_ID_SLUGS[id],
       countryName: 'International'
     }));
+    
+    // Only show competitions that actually exist in our bundled data
+    if (typeof DEMO_DATASET !== 'undefined') {
+      const validIds = new Set();
+      DEMO_DATASET.forEach(m => {
+        if (m.competitionId) validIds.add(String(m.competitionId));
+      });
+      if (typeof SUPPLEMENTAL_STANDINGS !== 'undefined') {
+        Object.keys(SUPPLEMENTAL_STANDINGS).forEach(k => validIds.add(k.split('_')[0]));
+      }
+      if (typeof SUPPLEMENTAL_MATCHES !== 'undefined') {
+        SUPPLEMENTAL_MATCHES.forEach(m => validIds.add(String(m.competitionId)));
+      }
+      allCompetitions = allCompetitions.filter(c => validIds.has(c.competitionId));
+    }
   }
 
   renderCompetitions(allCompetitions);
