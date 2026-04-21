@@ -314,7 +314,7 @@ function enterDashboard() {
  * A fast fetch that times out after ms (default 1500)
  * Essential for Vercel speed when the backend is offline.
  */
-async function fastFetch(url, ms = 1500) {
+async function fastFetch(url, ms = 4000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), ms);
   try {
@@ -345,19 +345,23 @@ async function checkStatus() {
   const text = document.getElementById('sync-text');
 
   try {
-    const r = await fastFetch('/api/status');
+    const r = await fastFetch('/api/status', 3000);
     const d = await r.json();
-    if (d.eventsReady) {
+    pill.style.background = '';
+    if (d.eventsReady && d.lineupsReady) {
       pill.classList.add('ready');
-      text.textContent = 'Live';
-    } else {
+      text.textContent = '⚡ Live';
+    } else if (d.status === 'ok') {
       pill.classList.remove('ready');
       text.textContent = 'Syncing...';
+    } else {
+      pill.classList.remove('ready');
+      text.textContent = 'Offline';
     }
   } catch (_) {
-    pill.classList.add('ready');
-    pill.style.background = 'var(--text-muted)';
-    text.textContent = 'DEMO MODE';
+    pill.classList.remove('ready');
+    pill.style.background = 'rgba(255,60,60,0.18)';
+    text.textContent = '⚠ Offline';
   }
 }
 
@@ -444,20 +448,47 @@ async function selectCompetition(comp) {
   // Load seasons for this competition
   const sel = document.getElementById('season-select');
   sel.innerHTML = '<option value="">All Seasons</option>';
+
   if (currentCompId) {
+    let seasons = [];
+
+    // Try to get seasons from the API (with a short timeout so demo mode is fast)
     try {
-      const r = await fetch(`/api/seasons?competitionId=${encodeURIComponent(currentCompId)}`);
-      const seasons = await r.json();
-      seasons.forEach(s => {
-        const o = document.createElement('option');
-        o.value = s; o.textContent = s;
-        sel.appendChild(o);
-      });
-      // Default to most recent season
-      if (seasons.length) { sel.value = seasons[0]; currentSeason = seasons[0]; }
+      const r = await fastFetch(`/api/seasons?competitionId=${encodeURIComponent(currentCompId)}`, 1500);
+      if (r.ok) seasons = await r.json();
     } catch (_) {}
+
+    // Fallback: derive unique seasons from DEMO_DATASET
+    if (!seasons || !seasons.length) {
+      if (typeof DEMO_DATASET !== 'undefined') {
+        const seasonSet = new Set();
+        DEMO_DATASET.forEach(m => {
+          if (m.competitionId === currentCompId && m.season) seasonSet.add(String(m.season));
+        });
+        seasons = [...seasonSet].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      }
+    }
+
+    // Populate dropdown
+    seasons.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      sel.appendChild(o);
+    });
+
+    // Default to most recent season
+    if (seasons.length) { sel.value = seasons[0]; currentSeason = seasons[0]; }
   }
+
   // Respect current tab — don't always go to matches
+  if (currentTab === 'standings') loadStandings();
+  else if (currentTab === 'market') loadMarket();
+  else loadMatches();
+}
+
+// Called when the season dropdown changes — respects whichever tab is active
+function onSeasonChange() {
+  currentSeason = document.getElementById('season-select').value;
   if (currentTab === 'standings') loadStandings();
   else if (currentTab === 'market') loadMarket();
   else loadMatches();
@@ -654,9 +685,12 @@ async function openMatchDetail(gameId, el) {
         
         // Generate aesthetically pleasing mock lineups
         const dummyLineups = [];
+        // Use short club name abbreviations (first word) to keep lineup names tidy
+        const shortHome = (match.homeClubName || 'Home').split(' ')[0];
+        const shortAway = (match.awayClubName || 'Away').split(' ')[0];
         for (let i = 1; i <= 11; i++) {
-          dummyLineups.push({ clubId: match.homeClubId, jerseyNumber: i, playerName: `${match.homeClubName} Player ${i}` });
-          dummyLineups.push({ clubId: match.awayClubId, jerseyNumber: i, playerName: `${match.awayClubName} Player ${i}` });
+          dummyLineups.push({ clubId: match.homeClubId, jerseyNumber: i, playerName: `${shortHome} Player ${i}` });
+          dummyLineups.push({ clubId: match.awayClubId, jerseyNumber: i, playerName: `${shortAway} Player ${i}` });
         }
 
         // Generate some basic mock events so the Events tab isn't empty either
@@ -768,12 +802,22 @@ function renderLineups(lineups, match) {
   const homePlayers = lineups.filter(p => String(p.clubId) === String(match.homeClubId));
   const awayPlayers = lineups.filter(p => String(p.clubId) === String(match.awayClubId));
 
-  const renderCol = (players) => players.slice(0, 20).map(p =>
-    `<div class="lineup-player">
-      <span class="lineup-number">${esc(String(p.jerseyNumber || ''))}</span>
-      <span>${esc(p.playerName || p.playerId || '—')}</span>
-    </div>`
-  ).join('');
+  // Sort: starters first, subs after
+  const sortLineup = (players) => [
+    ...players.filter(p => (p.type || '').toLowerCase().includes('starting')),
+    ...players.filter(p => !(p.type || '').toLowerCase().includes('starting')),
+  ];
+
+  const renderCol = (players) => sortLineup(players).slice(0, 20).map(p => {
+    const num = esc(String(p.number || p.jerseyNumber || ''));
+    const name = esc(p.playerName || p.playerId || '—');
+    const isCaptain = p.teamCaptain === '1' || p.teamCaptain === true;
+    const isSub = (p.type || '').toLowerCase().includes('sub');
+    return `<div class="lineup-player${isSub ? ' lineup-sub' : ''}">
+      <span class="lineup-number">${num}</span>
+      <span>${name}${isCaptain ? ' <span style="color:var(--accent);font-size:10px;">(C)</span>' : ''}</span>
+    </div>`;
+  }).join('');
 
   return `<div class="lineups-section">
     <div class="lineup-grid">
@@ -808,93 +852,101 @@ function switchTab(tab) {
   else loadMatches();
 }
 
-// ── Standings ──────────────────────────────────────────────────
 async function loadStandings() {
+  // Always read the current season from the DOM so it stays in sync with the dropdown
+  currentSeason = document.getElementById('season-select').value;
+
   const el = document.getElementById('standings-container');
-  if (!currentCompId || !currentSeason) {
-    el.innerHTML = '<div class="empty-state"><p>Select a competition and season to view standings</p></div>';
+  if (!currentCompId) {
+    el.innerHTML = '<div class="empty-state"><p>Select a competition to view standings</p></div>';
     return;
   }
   el.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Building table...</p></div>';
-    let rows = [];
-    try {
-      const r = await fastFetch(`/api/standings?competitionId=${encodeURIComponent(currentCompId)}&season=${encodeURIComponent(currentSeason)}`);
-      if (r.ok) rows = await r.json();
-    } catch (_) {}
+  let rows = [];
+  try {
+    const r = await fastFetch(`/api/standings?competitionId=${encodeURIComponent(currentCompId)}&season=${encodeURIComponent(currentSeason)}`);
+    if (r.ok) rows = await r.json();
+  } catch (_) {}
 
-    // If API has no data, try supplemental web-sourced data
-    let isSupplemental = false;
-    if (!rows || !rows.length) {
-      const key = `${currentCompId}_${currentSeason}`;
-      rows = SUPPLEMENTAL_STANDINGS[key] || [];
-      isSupplemental = rows.length > 0;
-    }
+  // If API has no data, try supplemental web-sourced data
+  let isSupplemental = false;
+  if (!rows || !rows.length) {
+    const key = `${currentCompId}_${currentSeason}`;
+    rows = SUPPLEMENTAL_STANDINGS[key] || [];
+    isSupplemental = rows.length > 0;
+  }
 
-    // Dynamic Standings Aggregation for Offline Vercel Datasets
-    let isAggregated = false;
-    if (!rows || !rows.length) {
-      if (typeof DEMO_DATASET !== 'undefined') {
-        const compMatches = DEMO_DATASET.filter(m => m.competitionId === currentCompId);
-        if (compMatches.length) {
-          const stats = {};
-          compMatches.forEach(m => {
-            const h = m.homeClubName; const a = m.awayClubName;
-            if (!h || !a) return;
-            if (!stats[h]) stats[h] = { clubName: h, played:0, won:0, drawn:0, lost:0, goalsFor:0, goalsAgainst:0, goalDifference:0, points:0 };
-            if (!stats[a]) stats[a] = { clubName: a, played:0, won:0, drawn:0, lost:0, goalsFor:0, goalsAgainst:0, goalDifference:0, points:0 };
-            
-            const hg = parseInt(m.homeClubGoals)||0; const ag = parseInt(m.awayClubGoals)||0;
-            stats[h].played++; stats[a].played++;
-            stats[h].goalsFor += hg; stats[h].goalsAgainst += ag;
-            stats[a].goalsFor += ag; stats[a].goalsAgainst += hg;
-            
-            if (hg > ag) { stats[h].won++; stats[a].lost++; stats[h].points += 3; }
-            else if (ag > hg) { stats[a].won++; stats[h].lost++; stats[a].points += 3; }
-            else { stats[h].drawn++; stats[a].drawn++; stats[h].points += 1; stats[a].points += 1; }
-          });
-          
-          rows = Object.values(stats).map(s => {
-            s.goalDifference = s.goalsFor - s.goalsAgainst;
-            return s;
-          }).sort((a,b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor);
-          isAggregated = true;
-        }
+  // Dynamic Standings Aggregation for Offline / Demo Datasets
+  let isAggregated = false;
+  if (!rows || !rows.length) {
+    if (typeof DEMO_DATASET !== 'undefined') {
+      // Filter by competition; also filter by season if one is selected
+      const compMatches = DEMO_DATASET.filter(m => {
+        const matchComp = m.competitionId === currentCompId;
+        const matchSeason = !currentSeason || String(m.season) === String(currentSeason);
+        return matchComp && matchSeason;
+      });
+      if (compMatches.length) {
+        const stats = {};
+        compMatches.forEach(m => {
+          const h = m.homeClubName; const a = m.awayClubName;
+          if (!h || !a) return;
+          if (!stats[h]) stats[h] = { clubName: h, played:0, won:0, drawn:0, lost:0, goalsFor:0, goalsAgainst:0, goalDifference:0, points:0 };
+          if (!stats[a]) stats[a] = { clubName: a, played:0, won:0, drawn:0, lost:0, goalsFor:0, goalsAgainst:0, goalDifference:0, points:0 };
+
+          const hg = parseInt(m.homeClubGoals)||0; const ag = parseInt(m.awayClubGoals)||0;
+          stats[h].played++; stats[a].played++;
+          stats[h].goalsFor += hg; stats[h].goalsAgainst += ag;
+          stats[a].goalsFor += ag; stats[a].goalsAgainst += hg;
+
+          if (hg > ag) { stats[h].won++; stats[a].lost++; stats[h].points += 3; }
+          else if (ag > hg) { stats[a].won++; stats[h].lost++; stats[a].points += 3; }
+          else { stats[h].drawn++; stats[a].drawn++; stats[h].points += 1; stats[a].points += 1; }
+        });
+
+        rows = Object.values(stats).map(s => {
+          s.goalDifference = s.goalsFor - s.goalsAgainst;
+          return s;
+        }).sort((a,b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor);
+        isAggregated = true;
       }
     }
+  }
 
-    if (!rows.length) {
-      el.innerHTML = '<div class="empty-state"><p>No standings data available for this competition</p><p style="font-size:11px;color:var(--text-muted);margin-top:8px">Matches may be cup ties or lack season bindings.</p></div>';
-      return;
-    }
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-state"><p>No standings data available for this competition/season</p><p style="font-size:11px;color:var(--text-muted);margin-top:8px">Try selecting a different season — cup/international matches may not have season bindings.</p></div>';
+    return;
+  }
 
-    const title = document.getElementById('comp-title').textContent;
-    const badgeHtml = isSupplemental 
-      ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;background:rgba(76,175,125,0.12);color:var(--win);margin-left:8px;">STATIC SOURCED</span>`
-      : isAggregated 
-      ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;background:var(--accent-dim);color:var(--accent);margin-left:8px;">LIVE OFFLINE</span>`
-      : '';
 
-    el.innerHTML = `
-      <div class="standings-card">
-        <div class="standings-title">${esc(title)} — ${esc(currentSeason)} ${badgeHtml}</div>
-        <table class="standings-table">
-          <thead><tr>
-            <th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th>
-          </tr></thead>
-          <tbody>
-            ${rows.map((s, i) => `<tr>
-              <td class="standing-pos">${i+1}</td>
-              <td class="standing-team">${esc(s.clubName)}</td>
-              <td>${s.played}</td><td>${s.won}</td><td>${s.drawn}</td><td>${s.lost}</td>
-              <td>${s.goalsFor}</td><td>${s.goalsAgainst}</td>
-              <td style="color:${s.goalDifference >= 0 ? 'var(--win)' : 'var(--loss)'}">${s.goalDifference >= 0 ? '+' : ''}${s.goalDifference}</td>
-              <td class="standing-pts">${s.points}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>`;
-    // Stagger-animate table rows
-    observeElements('.standings-table tbody tr', el);
+  const title = document.getElementById('comp-title').textContent;
+  const badgeHtml = isSupplemental
+    ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;background:rgba(76,175,125,0.12);color:var(--win);margin-left:8px;">STATIC SOURCE</span>`
+    : isAggregated
+    ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;background:var(--accent-dim);color:var(--accent);margin-left:8px;">LIVE DATA</span>`
+    : '';
+
+  el.innerHTML = `
+    <div class="standings-card">
+      <div class="standings-title">${esc(title)}${currentSeason ? ' \u2014 ' + esc(currentSeason) : ' \u2014 All Seasons'} ${badgeHtml}</div>
+      <table class="standings-table">
+        <thead><tr>
+          <th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((s, i) => `<tr>
+            <td class="standing-pos">${i+1}</td>
+            <td class="standing-team">${esc(s.clubName)}</td>
+            <td>${s.played}</td><td>${s.won}</td><td>${s.drawn}</td><td>${s.lost}</td>
+            <td>${s.goalsFor}</td><td>${s.goalsAgainst}</td>
+            <td style="color:${s.goalDifference >= 0 ? 'var(--win)' : 'var(--loss)'}">${s.goalDifference >= 0 ? '+' : ''}${s.goalDifference}</td>
+            <td class="standing-pts">${s.points}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  // Stagger-animate table rows
+  observeElements('.standings-table tbody tr', el);
 }
 
 // ── Market ─────────────────────────────────────────────────────
