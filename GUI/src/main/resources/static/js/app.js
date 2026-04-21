@@ -702,24 +702,54 @@ async function openMatchDetail(gameId, el) {
         document.getElementById('detail-comp').textContent = (match.competitionId || '') + (match.season ? ' · ' + match.season : '');
         
         const dummyLineups = [];
-        // Use realistic-sounding generic global names to make the demo UI look authentic
-        const hSurnames = ['Silva', 'Rossi', 'Smith', 'Costa', 'Hernandez', 'Kim', 'Johansson', 'Müller', 'Watanabe', 'Ahmed', 'Davies'];
-        const aSurnames = ['Gonzalez', 'Ivanov', 'Mensah', 'Okafor', 'Popovic', 'Larsson', 'Traoré', 'Fernandez', 'Becker', 'Dubois', 'Martinez'];
-        const initials = ['A.', 'J.', 'M.', 'L.', 'D.', 'C.', 'P.', 'S.', 'K.', 'E.', 'R.'];
+
+        // Global pool of international football surnames
+        const globalSurnames = [
+          'Silva','Santos','Oliveira','Souza','Ferreira','Alves','Pereira','Lima','Gomez',
+          'Diaz','Perez','Garcia','Martinez','Rodriguez','Lopez','Hernandez','Gonzalez','Sanchez',
+          'Torres','Flores','Rivera','Müller','Schmidt','Schneider','Fischer','Weber','Meyer',
+          'Becker','Hoffmann','Rossi','Russo','Ferrari','Esposito','Bianchi','Romano','Colombo',
+          'Marino','Greco','Smith','Jones','Taylor','Brown','Williams','Wilson','Johnson','Davies',
+          'Robinson','Wright','Bauer','Kim','Lee','Park','Choi','Jeong','Kang','Cho',
+          'Watanabe','Takahashi','Suzuki','Sato','Ito','Nakamura','Kobayashi','Yamamoto','Kato',
+          'Traore','Diop','Fall','Ndiaye','Gueye','Cisse','Sylla','Kamara','Mensah','Appiah',
+          'Boateng','Okafor','Kone','Toure','Coulibaly','Diallo','Popovic','Novak','Kovac','Horvat'
+        ];
+        const initialsStr = 'ABCDEFGHIJKLMNOPRSTUVWZ';
+
+        // Seeded PRNG ensures the *same* club always gets the exact *same* unique players
+        function getSquad(cId) {
+          let h = 0xdeadbeef;
+          const seed = String(cId);
+          for(let i=0; i<seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
+          const rng = () => {
+            h = Math.imul(h ^ (h >>> 16), 2246822507);
+            h = Math.imul(h ^ (h >>> 13), 3266489909);
+            return (h ^= h >>> 16) >>> 0;
+          };
+          const raw = [];
+          for(let i=1; i<=11; i++) {
+            const fInit = initialsStr[rng() % initialsStr.length] + '.';
+            const lName = globalSurnames[rng() % globalSurnames.length];
+            raw.push(fInit + ' ' + lName);
+          }
+          return raw;
+        }
+
+        const homeSquad = getSquad(match.homeClubId || 'home');
+        const awaySquad = getSquad(match.awayClubId || 'away');
 
         for (let i = 1; i <= 11; i++) {
           const isCapt = i === 5 ? ' (C)' : '';
-          const hName = `${initials[(i-1)%11]} ${hSurnames[(i-1)%11]}${isCapt}`;
-          const aName = `${initials[(i+2)%11]} ${aSurnames[(i-1)%11]}${isCapt}`;
-          dummyLineups.push({ clubId: match.homeClubId, number: i, playerName: hName, type: 'starting' });
-          dummyLineups.push({ clubId: match.awayClubId, number: i, playerName: aName, type: 'starting' });
+          dummyLineups.push({ clubId: match.homeClubId, number: i, playerName: homeSquad[i-1] + isCapt, type: 'starting' });
+          dummyLineups.push({ clubId: match.awayClubId, number: i, playerName: awaySquad[i-1] + isCapt, type: 'starting' });
         }
 
-        // Generate some basic mock events so the Events tab isn't empty either
+        // Generate basic mock events using the dynamically generated players of that team
         const dummyEvents = [
-          { minute: '12', type: 'goals', clubId: match.homeClubId, playerName: `${initials[8]} ${hSurnames[8]}`, description: 'Low finish into bottom corner' },
-          { minute: '45', type: 'yellow-cards', clubId: match.awayClubId, playerName: `${initials[4]} ${aSurnames[2]}`, description: 'Foul committed' },
-          { minute: '88', type: 'substitutions', clubId: match.homeClubId, playerName: `${initials[2]} ${hSurnames[2]}`, playerInName: `T. Reserve`, description: '' }
+          { minute: '12', type: 'goals', clubId: match.homeClubId, playerName: homeSquad[8], description: 'Low finish into bottom corner' },
+          { minute: '45', type: 'yellow-cards', clubId: match.awayClubId, playerName: awaySquad[3], description: 'Foul committed' },
+          { minute: '88', type: 'substitutions', clubId: match.homeClubId, playerName: homeSquad[2], playerInName: `T. Reserve`, description: '' }
         ];
 
         body.innerHTML = renderDetailBody(match, dummyEvents, dummyLineups);
