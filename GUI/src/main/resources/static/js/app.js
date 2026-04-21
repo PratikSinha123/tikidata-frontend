@@ -704,53 +704,31 @@ async function openMatchDetail(gameId, el) {
         
         const dummyLineups = [];
 
-        // Global pool of international football surnames
-        const globalSurnames = [
-          'Silva','Santos','Oliveira','Souza','Ferreira','Alves','Pereira','Lima','Gomez',
-          'Diaz','Perez','Garcia','Martinez','Rodriguez','Lopez','Hernandez','Gonzalez','Sanchez',
-          'Torres','Flores','Rivera','Müller','Schmidt','Schneider','Fischer','Weber','Meyer',
-          'Becker','Hoffmann','Rossi','Russo','Ferrari','Esposito','Bianchi','Romano','Colombo',
-          'Marino','Greco','Smith','Jones','Taylor','Brown','Williams','Wilson','Johnson','Davies',
-          'Robinson','Wright','Bauer','Kim','Lee','Park','Choi','Jeong','Kang','Cho',
-          'Watanabe','Takahashi','Suzuki','Sato','Ito','Nakamura','Kobayashi','Yamamoto','Kato',
-          'Traore','Diop','Fall','Ndiaye','Gueye','Cisse','Sylla','Kamara','Mensah','Appiah',
-          'Boateng','Okafor','Kone','Toure','Coulibaly','Diallo','Popovic','Novak','Kovac','Horvat'
-        ];
-        const initialsStr = 'ABCDEFGHIJKLMNOPRSTUVWZ';
-
-        // Seeded PRNG ensures the *same* club always gets the exact *same* unique players
-        function getSquad(cId) {
-          let h = 0xdeadbeef;
-          const seed = String(cId);
-          for(let i=0; i<seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
-          const rng = () => {
-            h = Math.imul(h ^ (h >>> 16), 2246822507);
-            h = Math.imul(h ^ (h >>> 13), 3266489909);
-            return (h ^= h >>> 16) >>> 0;
-          };
-          const raw = [];
-          for(let i=1; i<=11; i++) {
-            const fInit = initialsStr[rng() % initialsStr.length] + '.';
-            const lName = globalSurnames[rng() % globalSurnames.length];
-            raw.push(fInit + ' ' + lName);
+        // Fetch actual real squads embedded directly from the massive offline database
+        const getRealSquad = (cId) => {
+          if (typeof REAL_SQUADS !== 'undefined' && REAL_SQUADS[cId] && REAL_SQUADS[cId].length > 0) {
+            return REAL_SQUADS[cId];
           }
-          return raw;
-        }
+          // Ultimate fallback if a club literally has zero real players recorded
+          return Array.from({length: 22}, (_, i) => [`Unknown Player ${i+1}`, 'Substitute']);
+        };
 
-        const homeSquad = getSquad(match.homeClubId || 'home');
-        const awaySquad = getSquad(match.awayClubId || 'away');
+        const homeSquad = getRealSquad(match.homeClubId);
+        const awaySquad = getRealSquad(match.awayClubId);
 
         for (let i = 1; i <= 11; i++) {
           const isCapt = i === 5 ? ' (C)' : '';
-          dummyLineups.push({ clubId: match.homeClubId, number: i, playerName: homeSquad[i-1] + isCapt, type: 'starting' });
-          dummyLineups.push({ clubId: match.awayClubId, number: i, playerName: awaySquad[i-1] + isCapt, type: 'starting' });
+          const hPlayer = homeSquad[i-1] || [`Home Player ${i}`, 'Bench'];
+          const aPlayer = awaySquad[i-1] || [`Away Player ${i}`, 'Bench'];
+          dummyLineups.push({ clubId: match.homeClubId, number: i, playerName: hPlayer[0] + isCapt, type: 'starting', position: hPlayer[1] });
+          dummyLineups.push({ clubId: match.awayClubId, number: i, playerName: aPlayer[0] + isCapt, type: 'starting', position: aPlayer[1] });
         }
 
-        // Generate basic mock events using the dynamically generated players of that team
+        // Generate basic mock events using actual dynamically generated real players
         const dummyEvents = [
-          { minute: '12', type: 'goals', clubId: match.homeClubId, playerName: homeSquad[8], description: 'Low finish into bottom corner' },
-          { minute: '45', type: 'yellow-cards', clubId: match.awayClubId, playerName: awaySquad[3], description: 'Foul committed' },
-          { minute: '88', type: 'substitutions', clubId: match.homeClubId, playerName: homeSquad[2], playerInName: `T. Reserve`, description: '' }
+          { minute: '12', type: 'goals', clubId: match.homeClubId, playerName: (homeSquad[8] || [])[0] || 'Striker', description: 'Low finish into bottom corner' },
+          { minute: '45', type: 'yellow-cards', clubId: match.awayClubId, playerName: (awaySquad[3] || [])[0] || 'Defender', description: 'Foul committed' },
+          { minute: '88', type: 'substitutions', clubId: match.homeClubId, playerName: (homeSquad[2] || [])[0] || 'Midfielder', playerInName: (homeSquad[15] || [])[0] || 'Reserve', description: '' }
         ];
 
         body.innerHTML = renderDetailBody(match, dummyEvents, dummyLineups);
@@ -866,9 +844,10 @@ function renderLineups(lineups, match) {
     const name = esc(p.playerName || p.playerId || '—');
     const isCaptain = p.teamCaptain === '1' || p.teamCaptain === true;
     const isSub = (p.type || '').toLowerCase().includes('sub');
+    const posBadge = p.position ? `<span style="font-size:9px;color:var(--text-muted);margin-left:6px;border:1px solid rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px;text-transform:uppercase;">${esc(String(p.position))}</span>` : '';
     return `<div class="lineup-player${isSub ? ' lineup-sub' : ''}">
       <span class="lineup-number">${num}</span>
-      <span>${name}${isCaptain ? ' <span style="color:var(--accent);font-size:10px;">(C)</span>' : ''}</span>
+      <span>${name}${isCaptain ? ' <span style="color:var(--accent);font-size:10px;">(C)</span>' : ''}${posBadge}</span>
     </div>`;
   }).join('');
 
