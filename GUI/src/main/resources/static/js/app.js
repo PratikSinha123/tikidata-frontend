@@ -458,15 +458,17 @@ async function selectCompetition(comp) {
       if (r.ok) seasons = await r.json();
     } catch (_) {}
 
-    // Fallback: derive unique seasons from DEMO_DATASET
+    // Fallback: If no API, provide a robust default list of seasons (2025 down to 2012)
+    // plus any extra ones discovered in the local DEMO_DATASET just in case.
     if (!seasons || !seasons.length) {
+      const seasonSet = new Set(['2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2014', '2013', '2012']);
       if (typeof DEMO_DATASET !== 'undefined') {
-        const seasonSet = new Set();
         DEMO_DATASET.forEach(m => {
+          // Add any other seasons found for this competition as well
           if (m.competitionId === currentCompId && m.season) seasonSet.add(String(m.season));
         });
-        seasons = [...seasonSet].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
       }
+      seasons = [...seasonSet].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     }
 
     // Populate dropdown
