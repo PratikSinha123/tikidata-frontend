@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/GUI/src/main/resources/static/$1"
+    },
+    {
+      "source": "/",
+      "destination": "/GUI/src/main/resources/static/index.html"
+    }
+  ]
+}
