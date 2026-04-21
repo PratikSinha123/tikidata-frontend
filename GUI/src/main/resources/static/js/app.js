@@ -343,6 +343,7 @@ function rotateQuotes() {
 async function checkStatus() {
   const pill = document.getElementById('sync-status');
   const text = document.getElementById('sync-text');
+  if (!pill || !text) return;
 
   try {
     const r = await fastFetch('/api/status', 3000);
